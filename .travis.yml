@@ -3,7 +3,7 @@ branches:
         only:
                 - master
 notifications:
-        email: mongoose-im@erlang-solutions.com
+        email: lvzecai@gmail.com
 
 otp_release:
         - 17.1
