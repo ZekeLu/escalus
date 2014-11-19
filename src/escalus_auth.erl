@@ -43,13 +43,29 @@ auth_digest_md5(Conn, Props) ->
     wait_for_success(get_property(username, Props), Conn).
 
 auth_sasl_scram_sha1(Conn, Props) ->
-    Username = get_property(username, Props),
+    {Type, User} = case proplists:get_value(phone, Props) of
+                       undefined ->
+                           case proplists:get_value(email, Props) of
+                               undefined ->
+                                   case proplists:get_value(username, Props) of
+                                       undefined -> throw({missing_property, [username, phone, email]});
+                                       Username -> {username, Username}
+                                   end;
+                               Email -> {email, Email}
+                           end;
+                       Phone -> {phone, Phone}
+                   end,
     Nonce = base64:encode(crypto:rand_bytes(16)),
-    ClientFirstMessageBare = csvkv:format([{<<"n">>, Username},
-                                           {<<"r">>, Nonce}],
-                                          false),
+    ClientFirstMessageBare = csvkv:format([{<<"n">>, User},
+        {<<"r">>, Nonce}],
+        false),
+    TypeExtension = case Type of
+                        phone -> <<",t=1">>;
+                        email -> <<",t=2">>;
+                        _ -> <<>>
+                    end,
     GS2Header = <<"n,,">>,
-    Payload = <<GS2Header/binary,ClientFirstMessageBare/binary>>,
+    Payload = <<GS2Header/binary,ClientFirstMessageBare/binary,TypeExtension/binary>>,
     Stanza = escalus_stanza:auth(<<"SCRAM-SHA-1">>, [base64_cdata(Payload)]),
 
     ok = escalus_connection:send(Conn, Stanza),
@@ -72,7 +88,7 @@ auth_sasl_scram_sha1(Conn, Props) ->
             ok = scram_sha1_validate_server(SaltedPassword, AuthMessage,
                                             Decoded);
         #xmlel{name = <<"failure">>} ->
-            throw({auth_failed, Username, AuthReply})
+            throw({auth_failed, User, AuthReply})
     end.
 
 
